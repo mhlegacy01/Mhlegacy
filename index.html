@@ -367,7 +367,7 @@ function showAuth(mode,msg,kind){
     if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))return showAuth(mode,'Enter a valid email address.');
     var go=o.querySelector('#a_go');go.disabled=true;
     try{
-      if(forgot){await authCall('/recover',{email:email});return showAuth('signin','If that email has an account, a reset link is on its way.','ok');}
+      if(forgot){await authCall('/recover?redirect_to='+encodeURIComponent(location.origin+location.pathname),{email:email});return showAuth('signin','If that email has an account, a reset link is on its way.','ok');}
       if(pw.length<8){go.disabled=false;return showAuth(mode,'Password must be at least 8 characters.');}
       if(signup){
         if(pw!==o.querySelector('#a_pw2').value){return showAuth(mode,'The two passwords do not match.');}
