@@ -454,10 +454,11 @@ const rankObj=(biz,v)=>(biz==='RHB'?RHB_RANKS:HLMT_RANKS).find(x=>x.v===v);
 const rankLabel=(biz,v)=>{const o=rankObj(biz,v);return o?o.l+' ('+o.v+')':'Not Assigned Yet';};
 const rankLevel=(biz,v)=>{const o=rankObj(biz,v);return o?o.lv:0;};
 const UT_CATS=[{v:'cash',l:'Cash Sales',c:'var(--c1)'},{v:'epf',l:'EPF / KWSP Sales',c:'var(--c2)'},{v:'prs',l:'PRS Sales',c:'var(--c3)'},{v:'rsp',l:'Regular Savings Plan (RSP)',c:'var(--c4)'}];
-const UT_STATUS=['Submit','Disbursed','Rejected'];
+const UT_STATUS=['Close','Submit','Disbursed','Rejected'];
+const stLabel=s=>s==='Close'?'Closed':s;
 const TK_STATUS=['Submitted','Inforced','Pending'];
 const RC_STATUS=['Prospect','Registered','Existing Agent'];
-const STC={Closed:'var(--emerald)',Disbursed:'var(--emerald)',Rejected:'var(--crit)',Submit:'var(--c7)',Submitted:'var(--c1)',Inforced:'var(--good)',Pending:'var(--warn)',Prospect:'var(--c4)',Registered:'var(--c3)','Existing Agent':'var(--c7)',RHB:'var(--c1)',HLMT:'var(--c2)'};
+const STC={Close:'var(--c4)',Closed:'var(--emerald)',Disbursed:'var(--emerald)',Rejected:'var(--crit)',Submit:'var(--c7)',Submitted:'var(--c1)',Inforced:'var(--good)',Pending:'var(--warn)',Prospect:'var(--c4)',Registered:'var(--c3)','Existing Agent':'var(--c7)',RHB:'var(--c1)',HLMT:'var(--c2)'};
 const affLabel=a=>a==='RHB'?'RHB only':a==='HLMT'?'HLMT only':'RHB and HLMT';
 const hasRHB=p=>!!p&&(p.affiliation==='RHB'||p.affiliation==='BOTH');
 const hasHLMT=p=>!!p&&(p.affiliation==='HLMT'||p.affiliation==='BOTH');
@@ -465,7 +466,7 @@ const SETUP_L={not_started:'Not Started',in_progress:'In Progress',completed:'Co
 
 /* ---------- state ---------- */
 const S={db:null,dl:null,uid:null,isOwner:false,canWrite:null,profile:null,profileLoaded:false,myAdmin:null,
-  agents:{},agentsInit:false,admin:{},targets:{},items:{},itemSubs:{},subs:{},lastSeen:'',lastUpdate:null,
+  agents:{},challenges:{},chq:{},agentsInit:false,admin:{},targets:{},items:{},itemSubs:{},subs:{},lastSeen:'',lastUpdate:null,
   ownerView:'leader',view:'',drill:null,period:{k:'ytd',from:'',to:''},aff:'all',
   dir:{q:'',aff:'all',rhb:'all',hlmt:'all',status:'all',perf:'all',sort:'name'},
   rep:{module:'UT',agent:'all',q:'',cat:'all',status:'all',expAgent:''},rcf:{cat:'all',status:'all',agent:'all',q:''},
@@ -496,7 +497,7 @@ function rowsOf(uids,module,r){
 }
 function utStats(rows,r){
   /* Rejected submissions are listed by status but excluded from every sales total. */
-  const s={n:0,nAll:rows.length,total:0,rsp:0,cat:{cash:0,epf:0,prs:0,rsp:0},catN:{cash:0,epf:0,prs:0,rsp:0},status:{Submit:{n:0,amt:0},Disbursed:{n:0,amt:0},Rejected:{n:0,amt:0}},fund:{},month:[],monthCat:{cash:[],epf:[],prs:[],rsp:[]},agent:{}};
+  const s={n:0,nAll:rows.length,total:0,rsp:0,cat:{cash:0,epf:0,prs:0,rsp:0},catN:{cash:0,epf:0,prs:0,rsp:0},status:{Close:{n:0,amt:0},Submit:{n:0,amt:0},Disbursed:{n:0,amt:0},Rejected:{n:0,amt:0}},fund:{},month:[],monthCat:{cash:[],epf:[],prs:[],rsp:[]},agent:{}};
   const mn=monthSpan(r);for(let i=0;i<mn;i++){s.month.push(0);for(const c in s.monthCat)s.monthCat[c].push(0);}
   for(const x of rows){
     const a=r2(x.amount),st=s.status[x.status];
@@ -642,7 +643,7 @@ function hbars(items,o){
 }
 function kpi(cls,label,value,sub){value=String(value).replace(/^RM /,'<small style="font-size:12px;font-weight:600;color:var(--muted)">RM</small> ');return '<div class="kpi '+cls+'"><div class="l">'+esc(label)+'</div><div class="v num" style="font-size:clamp(18px,2.2vw,22px);white-space:nowrap;overflow-wrap:normal">'+value+'</div>'+(sub?'<div class="s">'+sub+'</div>':'')+'</div>';}
 function pill(text,color,extra){return '<span class="pill'+(extra?' '+extra:'')+'">'+(color?'<i style="background:'+color+'"></i>':'')+esc(text)+'</span>';}
-function statusPill(s){return pill((s==='Pending'?'⚠ ':'')+s,STC[s]);}
+function statusPill(s){return pill((s==='Pending'?'⚠ ':'')+stLabel(s),STC[s]);}
 function empty(title,body,btn){return '<div class="empty"><b>'+esc(title)+'</b>'+esc(body)+(btn?'<div style="margin-top:12px">'+btn+'</div>':'')+'</div>';}
 function card(title,sub,body,extra){return '<section class="card"'+(extra||'')+'>'+(title?'<h2>'+esc(title)+'</h2>':'')+(sub?'<div class="sub">'+sub+'</div>':'')+body+'</section>';}
 
@@ -715,6 +716,7 @@ function startMine(){
   S.subs.mine=itemsCol(S.uid).onSnapshot(s=>{S.items[S.uid]=s.docs.map(d=>normItem(d.data()));touch();schedule();},onErr);
   S.subs.set=S.db.doc('settings/funds').onSnapshot(s=>{S.settings.funds=s.exists&&Array.isArray(s.data().list)?s.data().list:[];schedule();},onErr);
   S.subs.setp=S.db.doc('settings/products').onSnapshot(s=>{S.settings.products=s.exists&&Array.isArray(s.data().list)?s.data().list:[];schedule();},onErr);
+  S.subs.ch=S.db.collection('challenges').onSnapshot(s=>{const m={};s.docs.forEach(d=>{m[d.id]=d.data();});S.challenges=m;schedule();},onErr);
   S.subs.tg=S.db.collection('targets').onSnapshot(s=>{const m={};s.docs.forEach(d=>{m[d.id]=d.data();});S.targets=m;schedule();},onErr);
   S.subs.adm=S.db.doc('admin/'+S.uid).onSnapshot(s=>{S.myAdmin=s.exists?s.data():null;schedule();},onErr);
 }
@@ -731,6 +733,7 @@ function startLeader(){
     const m={};s.docs.forEach(d=>{m[d.id]=d.data();});
     if(S.agentsInit)s.docChanges().forEach(c=>{if(c.type==='added'&&c.doc.id!==S.uid&&!c.doc.data().demo)toast('New agent registered: '+c.doc.data().fullName);});
     S.agents=m;S.agentsInit=true;syncItemSubs();touch();schedule();},onErr);
+  S.subs.chq=S.db.collection('chq').onSnapshot(s=>{const m={};s.docs.forEach(d=>{m[d.id]=d.data();});S.chq=m;schedule();},onErr);
   S.subs.adma=S.db.collection('admin').onSnapshot(s=>{const m={};s.docs.forEach(d=>{m[d.id]=d.data();});S.admin=m;schedule();},onErr);
   S.subs.lead=S.db.doc('data/users/'+S.uid+'/leader').onSnapshot(s=>{S.lastSeen=s.exists?(s.data().lastSeen||''):'';schedule();},onErr);
 }
@@ -743,8 +746,8 @@ function mode(){
   return S.profile?'agent':'register';
 }
 const R=()=>periodRange(S.period);
-const LEADER_TABS=[['overview','Overview'],['agents','Agents'],['boards','Leaderboards'],['feed','Live Feed'],['recruit','Recruitment'],['clients','Clients'],['prospects','Prospects'],['targets','Targets'],['reports','Reports'],['settings','Settings']];
-function agentTabs(){const t=[['dash','My Dashboard']];if(hasRHB(S.profile))t.push(['ut','Unit Trust']);if(hasHLMT(S.profile))t.push(['tk','Takaful']);t.push(['rc','Recruitment'],['cl','Clients'],['pr','Prospects'],['profile','Profile & Setup']);return t;}
+const LEADER_TABS=[['overview','Overview'],['agents','Agents'],['boards','Leaderboards'],['challenge','Challenge'],['feed','Live Feed'],['recruit','Recruitment'],['clients','Clients'],['prospects','Prospects'],['targets','Targets'],['reports','Reports'],['settings','Settings']];
+function agentTabs(){const t=[['dash','My Dashboard']];if(hasRHB(S.profile))t.push(['ut','Unit Trust']);if(hasHLMT(S.profile))t.push(['tk','Takaful']);t.push(['ch','Challenge'],['rc','Recruitment'],['cl','Clients'],['pr','Prospects'],['profile','Profile & Setup']);return t;}
 function newAgents(){return Object.keys(S.agents).filter(u=>u!==S.uid&&!S.agents[u].demo&&(S.agents[u].registeredAt||'')>S.lastSeen);}
 function renderChrome(m){
   $('#rolechip').innerHTML=m==='leader'?'<span class="role">Leader</span>':m==='agent'?'<span class="role">Agent</span>':'';
@@ -814,12 +817,12 @@ function utPanel(uids,r,showAg){
   const s=utStats(rowsOf(uids,'UT',r),r),head='<div class="sec"><h2>Unit Trust</h2><span class="tag">RHB Asset Management</span></div>';
   if(!s.nAll)return head+card('','',empty('No Unit Trust records in this period','Reported sales appear here as soon as they are saved.'));
   const mn=s.month.length,labels=MONTHS.slice(0,mn),rj=s.status.Rejected;
-  const k='<div class="kpis">'+kpi('ut','Total investment sales',rm(s.total),'Submit + Disbursed, lump-sum')+kpi('ut','Transactions',int(s.n),rj.n?rj.n+' rejected, excluded':'')+
+  const k='<div class="kpis">'+kpi('ut','Total investment sales',rm(s.total),'Closed + Submit + Disbursed, lump-sum')+kpi('ut','Transactions',int(s.n),rj.n?rj.n+' rejected, excluded':'')+
     kpi('ut','Cash Sales',rm(s.cat.cash),s.catN.cash+' txns')+kpi('ut','EPF / KWSP Sales',rm(s.cat.epf),s.catN.epf+' txns')+kpi('ut','PRS Sales',rm(s.cat.prs),s.catN.prs+' txns')+
     kpi('ut','RSP initial investment',rm(s.cat.rsp),s.catN.rsp+' plans')+kpi('ut','RSP monthly contribution',rm(s.rsp),'Per month · reported separately')+
-    kpi('ut','Disbursed',rm(s.status.Disbursed.amt),s.status.Disbursed.n+' txns · agent-reported')+kpi('ut','Submit',rm(s.status.Submit.amt),s.status.Submit.n+' txns · awaiting disbursement')+kpi('ut','Rejected',rm(rj.amt),rj.n+' txns · not in totals')+'</div>';
+    kpi('ut','Closed',rm(s.status.Close.amt),s.status.Close.n+' txns · pipeline, not yet submitted')+kpi('ut','Disbursed',rm(s.status.Disbursed.amt),s.status.Disbursed.n+' txns · agent-reported')+kpi('ut','Submit',rm(s.status.Submit.amt),s.status.Submit.n+' txns · awaiting disbursement')+kpi('ut','Rejected',rm(rj.amt),rj.n+' txns · not in totals')+'</div>';
   const cat=donut(UT_CATS.map(c=>({label:c.l,value:s.cat[c.v],color:c.c,sub:s.catN[c.v]+' txns'})),{center:'Lump-sum total'});
-  const stt=donut(UT_STATUS.map(x=>({label:x,value:s.status[x].amt,color:STC[x],sub:s.status[x].n+' txns'})),{center:'All submissions'});
+  const stt=donut(UT_STATUS.map(x=>({label:stLabel(x),value:s.status[x].amt,color:STC[x],sub:s.status[x].n+' txns'})),{center:'All submissions'});
   const mon=barChart({labels,series:UT_CATS.map(c=>({name:c.l,color:c.c,values:s.monthCat[c.v]})),stacked:true});
   const cmp=hbars(UT_CATS.map(c=>({label:c.l,value:s.cat[c.v],color:c.c})),{keepZero:true});
   const funds=hbars(sortDesc(s.fund,x=>x).slice(0,8).map(x=>({label:x.k,value:x.v,color:'var(--c1)'})));
@@ -835,14 +838,14 @@ function tkPanel(uids,r,showAg){
   const k='<div class="kpis">'+kpi('tk','Total FYAC',rm(s.fyac),'All reported cases')+kpi('tk','Total FYCC',rm(s.fycc),'All reported cases')+kpi('tk','Cases',int(s.n))+
     kpi('tk','Inforced FYAC',rm(inf.fyac),inf.n+' Inforced cases')+kpi('tk','Inforced FYCC',rm(inf.fycc),'Confirmed production')+
     kpi('tk','Submitted',int(s.status.Submitted.n)+' cases','FYAC '+rm(s.status.Submitted.fyac))+kpi('tk','Pending',int(s.status.Pending.n)+' cases','FYAC '+rm(s.status.Pending.fyac)+' · follow up')+'</div>';
-  const cnt=donut(TK_STATUS.map(x=>({label:x,value:s.status[x].n,color:STC[x]})),{fmt:v=>int(v)+' cases',center:'Cases',centerVal:int(s.n)});
-  const acS=donut(TK_STATUS.map(x=>({label:x,value:s.status[x].fyac,color:STC[x]})),{center:'FYAC'});
-  const ccS=donut(TK_STATUS.map(x=>({label:x,value:s.status[x].fycc,color:STC[x]})),{center:'FYCC'});
+  const cnt=donut(TK_STATUS.map(x=>({label:stLabel(x),value:s.status[x].n,color:STC[x]})),{fmt:v=>int(v)+' cases',center:'Cases',centerVal:int(s.n)});
+  const acS=donut(TK_STATUS.map(x=>({label:stLabel(x),value:s.status[x].fyac,color:STC[x]})),{center:'FYAC'});
+  const ccS=donut(TK_STATUS.map(x=>({label:stLabel(x),value:s.status[x].fycc,color:STC[x]})),{center:'FYCC'});
   const prods=Object.keys(s.product);
   const pa=hbars(prods.map(p=>({label:p,value:s.product[p].fyac,color:'var(--c3)'})).sort((a,b)=>b.value-a.value).slice(0,8));
   const pc=hbars(prods.map(p=>({label:p,value:s.product[p].fycc,color:'var(--c1)'})).sort((a,b)=>b.value-a.value).slice(0,8));
   const pend=rows.filter(x=>x.status==='Pending').sort((a,b)=>a.date<b.date?-1:1).slice(0,8);
-  const pt=pend.length?'<div class="tablewrap"><table><thead><tr><th>Date</th>'+(showAg?'<th>Agent</th>':'')+'<th>Product</th><th class="r">FYAC</th><th class="r">FYCC</th><th class="r">Days open</th></tr></thead><tbody>'+pend.map(x=>'<tr><td>'+fmtDate(x.date)+'</td>'+(showAg?'<td>'+esc(nameOf(x.agentId))+'</td>':'')+'<td>'+esc(x.product)+'</td><td class="r num">'+rm(x.fyac)+'</td><td class="r num">'+rm(x.fycc)+'</td><td class="r num">'+Math.max(0,Math.floor((Date.now()-new Date(x.date+'T00:00:00').getTime())/864e5))+'</td></tr>').join('')+'</tbody></table></div>':empty('Nothing pending','Every case in this period has a final status.');
+  const pt=pend.length?'<div class="tablewrap"><table><thead><tr><th>Date</th>'+(showAg?'<th>Agent</th>':'')+'<th>Product</th><th class="r">FYAC</th><th class="r">FYCC</th><th class="r">Days open</th></tr></thead><tbody>'+pend.map(x=>'<tr><td>'+fmtDate(x.date)+'</td>'+(showAg?'<td>'+esc(nameOf(x.agentId))+'</td>':'')+'<td>'+esc(x.product)+(x.clientName?'<div class="hint">Client: '+esc(x.clientName)+'</div>':'')+'</td><td class="r num">'+rm(x.fyac)+'</td><td class="r num">'+rm(x.fycc)+'</td><td class="r num">'+Math.max(0,Math.floor((Date.now()-new Date(x.date+'T00:00:00').getTime())/864e5))+'</td></tr>').join('')+'</tbody></table></div>':empty('Nothing pending','Every case in this period has a final status.');
   const ag=showAg?'<div class="grid wide">'+card('FYAC by agent','RM',hbars(sortDesc(s.agent,x=>x.fyac).map(x=>({label:nameOf(x.k),value:x.v,color:'var(--c3)',key:x.k}))))+card('FYCC by agent','RM',hbars(sortDesc(s.agent,x=>x.fycc).map(x=>({label:nameOf(x.k),value:x.v,color:'var(--c1)',key:x.k}))))+'</div>':'';
   return head+k+'<div class="grid wide">'+card('Case count by status','Number of cases, not RM',cnt)+card('FYAC by status','Monetary production in RM',acS)+'</div>'+
     '<div class="grid wide">'+card('FYCC by status','Monetary production in RM',ccS)+card('FYAC monthly trend','RM per month',lineChart({labels,values:s.mAc,color:'var(--c3)',name:'FYAC'}))+'</div>'+
@@ -882,10 +885,10 @@ function recTable(rows,o){
   const body=sorted.slice(0,o.limit||300).map(x=>{
     const key=esc(x.agentId+'|'+x.id);
     let mid='';
-    if(m==='UT')mid='<td>'+esc((UT_CATS.find(c=>c.v===x.category)||{}).l||x.category)+'</td><td>'+(x.fund&&x.fund.trim()?esc(x.fund):'<span class="hint" title="No fund entered. Reports use the sales category.">'+esc(fundLabel(x))+' (by type)</span>')+'</td><td class="r num">'+rm(x.amount)+'</td><td class="r num">'+(x.category==='rsp'?rm(x.monthlyContribution):'–')+'</td>';
-    else if(m==='TK')mid='<td>'+esc(x.product)+'</td><td class="r num">'+rm(x.fyac)+'</td><td class="r num">'+rm(x.fycc)+'</td>';
+    if(m==='UT')mid='<td>'+esc((UT_CATS.find(c=>c.v===x.category)||{}).l||x.category)+'</td><td>'+(x.fund&&x.fund.trim()?esc(x.fund):'<span class="hint" title="No fund entered. Reports use the sales category.">'+esc(fundLabel(x))+' (by type)</span>')+(x.clientName?'<div class="hint">Client: '+esc(x.clientName)+'</div>':'')+'</td><td class="r num">'+rm(x.amount)+'</td><td class="r num">'+(x.category==='rsp'?rm(x.monthlyContribution):'–')+'</td>';
+    else if(m==='TK')mid='<td>'+esc(x.product)+(x.clientName?'<div class="hint">Client: '+esc(x.clientName)+'</div>':'')+'</td><td class="r num">'+rm(x.fyac)+'</td><td class="r num">'+rm(x.fycc)+'</td>';
     else mid='<td>'+esc(x.name)+(x.status==='Existing Agent'?' '+pill('Existing',null,'hist'):'')+'</td><td>'+esc(x.category)+'</td>';
-    const sel=o.canEdit?'<select data-status="'+key+'" aria-label="Status" style="width:auto;padding:4px 6px">'+sts.map(s=>'<option'+(s===x.status?' selected':'')+'>'+s+'</option>').join('')+'</select>':statusPill(x.status);
+    const sel=o.canEdit?'<select data-status="'+key+'" aria-label="Status" style="width:auto;padding:4px 6px">'+sts.map(s=>'<option value="'+esc(s)+'"'+(s===x.status?' selected':'')+'>'+esc(stLabel(s))+'</option>').join('')+'</select>'+(m==='UT'||m==='TK'?timelineHtml(x):''):statusPill(x.status)+(m==='UT'||m==='TK'?timelineHtml(x):'');
     return '<tr><td class="num" style="white-space:nowrap">'+fmtDate(x.date)+(x.historical?' <span class="hint" title="Entered after the transaction date">· back-dated</span>':'')+'</td>'+(o.agentCol?'<td>'+esc(nameOf(x.agentId))+'</td>':'')+mid+'<td>'+sel+'</td><td class="hint num" style="white-space:nowrap">'+fmtTs(x.submittedAt)+'</td>'+(o.canEdit?'<td style="white-space:nowrap"><button class="btn sm ghost" data-act="edit" data-v="'+key+'">Edit</button> <button class="btn sm danger" data-act="del" data-v="'+key+'">Delete</button></td>':'')+'</tr>';
   }).join('');
   return '<div class="tablewrap"><table><thead><tr><th>Date</th>'+(o.agentCol?'<th>Agent</th>':'')+th+'<th>Status</th><th>Submitted</th>'+(o.canEdit?'<th></th>':'')+'</tr></thead><tbody>'+body+'</tbody></table></div>'+(sorted.length>(o.limit||300)?'<div class="hint" style="margin-top:6px">Showing the latest '+(o.limit||300)+' of '+sorted.length+'. Narrow the filters to see the rest.</div>':'');
@@ -896,7 +899,7 @@ function feedRow(x,showName){
   if(x.module==='UT'){title='Unit Trust · '+((UT_CATS.find(c=>c.v===x.category)||{}).l||x.category)+(x.fund&&x.fund.trim()?' · '+esc(x.fund):'');amt=rm(x.amount)+(x.category==='rsp'&&x.monthlyContribution?' + '+rm(x.monthlyContribution)+' per month':'');}
   else if(x.module==='TK'){title='Takaful · '+esc(x.product);amt='FYAC '+rm(x.fyac)+' · FYCC '+rm(x.fycc);}
   else{title='Recruitment · '+esc(x.category)+' · '+esc(x.name);}
-  return '<div class="it"><span class="dot" style="background:'+dot+'"></span><div><div>'+(showName?'<b>'+esc(nameOf(x.agentId))+'</b> · ':'')+title+'</div><div class="m">'+(amt?'<span class="num">'+amt+'</span> · ':'')+'Transaction date '+fmtDate(x.date)+' · submitted '+fmtTs(x.submittedAt)+(x.historical?' · back-dated':'')+'</div></div><div>'+statusPill(x.status)+'</div></div>';
+  return '<div class="it"><span class="dot" style="background:'+dot+'"></span><div><div>'+(showName?'<b>'+esc(nameOf(x.agentId))+'</b> · ':'')+title+'</div><div class="m">'+(amt?'<span class="num">'+amt+'</span> · ':'')+(x.clientName?'Client '+esc(x.clientName)+' · ':'')+'Transaction date '+fmtDate(x.date)+' · submitted '+fmtTs(x.submittedAt)+(x.historical?' · back-dated':'')+((x.module==='UT'||x.module==='TK')?timelineHtml(x):'')+'</div></div><div>'+statusPill(x.status)+'</div></div>';
 }
 function allItems(uids){const o=[];for(const u of uids)for(const x of (S.items[u]||[]))if(x.module==='UT'||x.module==='TK'||x.module==='RC')o.push(x);return o.sort((a,b)=>a.submittedAt<b.submittedAt?1:-1);}
 function addButtons(p){return (hasRHB(p)?'<button class="btn" data-act="add" data-v="UT">+ Unit Trust sale</button>':'')+(hasHLMT(p)?'<button class="btn" data-act="add" data-v="TK">+ Takaful case</button>':'')+'<button class="btn ghost" data-act="add" data-v="RC">+ Recruit</button><button class="btn ghost" data-act="add" data-v="CL">+ Client</button><button class="btn ghost" data-act="add" data-v="PR">+ Prospect</button>';}
@@ -939,6 +942,7 @@ function setupBanner(p){
 function agentView(){
   const v=S.view,p=S.profile;
   if(v==='ut'||v==='tk'||v==='rc')return moduleTab(v.toUpperCase());
+  if(v==='ch')return challengeAgentView();
   if(v==='cl')return clientsView(false);
   if(v==='pr')return prospectsView(false);
   if(v==='profile')return profileView();
@@ -946,7 +950,7 @@ function agentView(){
   const recent=mine.slice().sort((a,b)=>a.submittedAt<b.submittedAt?1:-1).slice(0,8);
   return pageHead('Hello, '+p.fullName.split(' ')[0],'Your production, calculated from the records you have saved. '+liveTag(),addButtons(p))+
     setupBanner(p)+(S.myAdmin&&S.myAdmin.status==='inactive'?'<div class="notice warn">Your account is marked inactive by the leader.</div>':'')+
-    reminderCard()+periodBar('')+kpiStrip(ids,r,p)+targetCard(S.uid,ids,r,false)+
+    reminderCard()+periodBar('')+kpiStrip(ids,r,p)+targetCard(S.uid,ids,r,false)+challengeStrip(ids,false)+
     (hasRHB(p)?utPanel(ids,r,false):'')+(hasHLMT(p)?tkPanel(ids,r,false):'')+rcPanel(ids,r,false)+
     card('Recent activity','Your latest submissions, newest first',recent.length?'<div class="feed">'+recent.map(x=>feedRow(x,false)).join('')+'</div>':empty('No records yet','Add your first sale or recruit to start your dashboard.',addButtons(p)));
 }
@@ -972,7 +976,7 @@ function filterBar(m,leader){
     '<label class="f" for="fq">Search<input id="fq" type="search" data-set="rep.q" value="'+esc(f.q)+'" placeholder="'+(m==='UT'?'Fund or notes':m==='TK'?'Product or notes':'Name or notes')+'"></label>'+
     (leader?'<label class="f" for="fa">Agent<select id="fa" data-set="rep.agent"><option value="all">All agents</option>'+Object.keys(S.agents).sort((a,b)=>nameOf(a)<nameOf(b)?-1:1).map(u=>'<option value="'+esc(u)+'"'+(f.agent===u?' selected':'')+'>'+esc(nameOf(u))+'</option>').join('')+'</select></label>':'')+
     (cats?'<label class="f" for="fc">'+(m==='UT'?'Sales category':'Recruitment category')+'<select id="fc" data-set="rep.cat"><option value="all">All</option>'+cats.map(c=>'<option value="'+c[0]+'"'+(f.cat===c[0]?' selected':'')+'>'+esc(c[1])+'</option>').join('')+'</select></label>':'')+
-    '<label class="f" for="fs">Status<select id="fs" data-set="rep.status"><option value="all">All</option>'+sts.map(s=>'<option'+(f.status===s?' selected':'')+'>'+s+'</option>').join('')+'</select></label></div></div>';
+    '<label class="f" for="fs">Status<select id="fs" data-set="rep.status"><option value="all">All</option>'+sts.map(s=>'<option value="'+esc(s)+'"'+(f.status===s?' selected':'')+'>'+esc(stLabel(s))+'</option>').join('')+'</select></label></div></div>';
 }
 function profileView(){
   const p=S.profile,st=p.setup||{};
@@ -1085,13 +1089,13 @@ function clientsView(leader){
   const uids=leader?Object.keys(S.agents):[S.uid],f=S.cl,q=f.q.trim().toLowerCase();
   const all=clientRows(uids);
   const rows=all.filter(x=>(!leader||f.agent==='all'||x.agentId===f.agent)&&(!q||[x.fullName,x.phone,x.email].join(' ').toLowerCase().includes(q))).sort((a,b)=>a.fullName.toLowerCase()<b.fullName.toLowerCase()?-1:1);
-  const sums={};PF.forEach(p=>{sums[p[0]]=rows.reduce((a,x)=>r2(a+r2((x.portfolio||{})[p[0]])),0);});
+  const sums={};PF.forEach(p=>{sums[p[0]]=rows.reduce((a,x)=>r2(a+r2(clientPortfolio(x).tot[p[0]])),0);});
   const rem=reminders(uids);
-  const kp='<div class="kpis">'+kpi('tm','Clients',int(rows.length))+PF.map(p=>kpi('tm','Portfolio · '+p[1],rm(sums[p[0]]),'Reported by agents')).join('')+kpi('rc','Due in 14 days',int(rem.length),'Appointments and EPF dates')+'</div>';
+  const kp='<div class="kpis">'+kpi('tm','Clients',int(rows.length))+PF.map(p=>kpi('tm','Portfolio · '+p[1],rm(sums[p[0]]),'Base + linked sales')).join('')+kpi('rc','Due in 14 days',int(rem.length),'Appointments and EPF dates')+'</div>';
   const filt='<div class="card" style="padding:12px"><div class="form"><label class="f" for="cq">Search<input id="cq" type="search" data-set="cl.q" value="'+esc(f.q)+'" placeholder="Name, phone or email"></label>'+
     (leader?'<label class="f" for="ca">Agent<select id="ca" data-set="cl.agent"><option value="all">All agents</option>'+Object.keys(S.agents).sort((a,b)=>nameOf(a)<nameOf(b)?-1:1).map(u=>'<option value="'+esc(u)+'"'+(f.agent===u?' selected':'')+'>'+esc(nameOf(u))+'</option>').join('')+'</select></label>':'')+'</div></div>';
-  const table=rows.length?'<div class="tablewrap"><table><thead><tr><th>Name</th>'+(leader?'<th>Agent</th>':'')+'<th>Phone</th><th>Email</th><th>IC</th>'+PF.map(p=>'<th class="r">'+p[1]+'</th>').join('')+'<th>Next EPF investment</th><th>Next appointment</th>'+(leader?'':'<th></th>')+'</tr></thead><tbody>'+
-    rows.map(x=>{const pf=x.portfolio||{};return '<tr><td><b>'+esc(x.fullName)+'</b>'+(x.demo?' '+pill('Demo',null,'hist'):'')+(x.notes?'<div class="hint">'+esc(x.notes.slice(0,80))+'</div>':'')+'</td>'+(leader?'<td>'+esc(nameOf(x.agentId))+'</td>':'')+'<td class="num">'+esc(x.phone||'–')+'</td><td>'+esc(x.email||'–')+'</td><td class="num">'+esc(x.icMasked||'–')+'</td>'+PF.map(p=>'<td class="r num">'+(pf[p[0]]?rm(pf[p[0]]):'–')+'</td>').join('')+'<td>'+dateCell(x.nextEpfDate)+'</td><td>'+dateCell(x.nextApptDate)+'</td>'+(leader?'':'<td style="white-space:nowrap"><button class="btn sm ghost" data-act="edit" data-v="'+esc(x.agentId+'|'+x.id)+'">Edit</button> <button class="btn sm danger" data-act="del" data-v="'+esc(x.agentId+'|'+x.id)+'">Delete</button></td>')+'</tr>';}).join('')+'</tbody></table></div>':
+  const table=rows.length?'<div class="tablewrap"><table><thead><tr><th>Name</th>'+(leader?'<th>Agent</th>':'')+'<th>Phone</th><th>Email</th><th>IC</th>'+PF.map(p=>'<th class="r">'+p[1]+'</th>').join('')+'<th>Next EPF investment</th><th>Next appointment</th><th></th>'+'</tr></thead><tbody>'+
+    rows.map(x=>{const cp=clientPortfolio(x),pf=cp.tot,ns=linkedSales(x).length;return '<tr><td><b>'+esc(x.fullName)+'</b>'+(x.demo?' '+pill('Demo',null,'hist'):'')+(x.notes?'<div class="hint">'+esc(x.notes.slice(0,80))+'</div>':'')+'</td>'+(leader?'<td>'+esc(nameOf(x.agentId))+'</td>':'')+'<td class="num">'+esc(x.phone||'–')+'</td><td>'+esc(x.email||'–')+'</td><td class="num">'+esc(x.icMasked||'–')+'</td>'+PF.map(p=>'<td class="r num">'+(pf[p[0]]?rm(pf[p[0]]):'–')+(cp.add[p[0]]>0?'<div class="hint">incl. '+rm(cp.add[p[0]])+' sales</div>':'')+'</td>').join('')+'<td>'+dateCell(x.nextEpfDate)+'</td><td>'+dateCell(x.nextApptDate)+'</td>'+'<td style="white-space:nowrap"><button class="btn sm ghost" data-act="clsales" data-v="'+esc(x.agentId+'|'+x.id)+'">Sales ('+ns+')</button>'+(leader?'':' <button class="btn sm ghost" data-act="edit" data-v="'+esc(x.agentId+'|'+x.id)+'">Edit</button> <button class="btn sm danger" data-act="del" data-v="'+esc(x.agentId+'|'+x.id)+'">Delete</button>')+'</td></tr>';}).join('')+'</tbody></table></div>':
     empty(all.length?'No clients match':'No clients yet',leader?'Clients added by agents appear here.':'Add your first client to track their portfolio and next appointment.',leader?'':'<button class="btn" data-act="add" data-v="CL">+ Add client</button>');
   return pageHead('Clients',leader?'Client portfolios across the team. IC numbers are masked; TIN and addresses stay private to each agent.':'Your clients, their portfolios and next appointments','<button class="btn ghost" data-act="export" data-v="clients">Export CSV</button>'+(leader?'':'<button class="btn" data-act="add" data-v="CL">+ Add client</button>'))+
     (demoNoteIf(leader))+kp+
@@ -1111,7 +1115,7 @@ async function openClient(id,pre){
     '<label class="f" for="c_phone">Phone number<input id="c_phone" inputmode="tel" maxlength="20" value="'+esc(o.phone||pr.phone||'')+'"></label>'+
     '<label class="f full" for="c_home">Home address<textarea id="c_home" maxlength="300">'+esc(sec.homeAddress||'')+'</textarea><span class="hint">Private to you.</span></label>'+
     '<label class="f full" for="c_office">Office address<textarea id="c_office" maxlength="300">'+esc(sec.officeAddress||'')+'</textarea><span class="hint">Private to you.</span></label>'+
-    '<div class="full"><b>Current portfolio</b> <span class="hint">Leave blank if none</span></div>'+PF.map(p=>num(p[0],p[1])).join('')+
+    '<div class="full"><b>Current portfolio</b> <span class="hint">Your starting figures. Disbursed and Inforced sales linked to this client are added on top automatically. Leave blank if none.</span></div>'+PF.map(p=>num(p[0],p[1])).join('')+
     '<label class="f" for="c_epfdate">Next EPF investment date<input id="c_epfdate" type="date" value="'+esc(o.nextEpfDate||'')+'"></label>'+
     '<label class="f" for="c_appt">Next proposed appointment<input id="c_appt" type="date" value="'+esc(o.nextApptDate||'')+'"></label>'+
     '<label class="f full" for="c_notes">Notes<textarea id="c_notes" maxlength="1000">'+esc(o.notes||'')+'</textarea></label></div>'+
@@ -1213,6 +1217,205 @@ async function saveList(docId,taId,label,max){
 const saveFunds=()=>saveList('funds','set_funds','Fund list',300);
 const saveProducts=()=>saveList('products','set_products','Product list',200);
 
+/* ---------- status dates ---------- */
+function statusDate(x,st){
+  if(x.statusDates&&x.statusDates[st])return x.statusDates[st];
+  const h=(x.history||[]).filter(e=>e.to===st&&e.at).pop();
+  if(h)return ymd(new Date(h.at));
+  return x.status===st?x.date:'';
+}
+function statusTimeline(x){
+  const sts=x.module==='UT'?UT_STATUS:TK_STATUS,out=[];
+  sts.forEach(s=>{const d=x.statusDates&&x.statusDates[s];if(d)out.push([s,d]);});
+  return out.sort((a,b)=>a[1]<b[1]?-1:a[1]>b[1]?1:0);
+}
+const timelineHtml=x=>{const t=statusTimeline(x);return t.length?'<div class="hint" style="white-space:nowrap">'+t.map(p=>esc(stLabel(p[0]))+' '+fmtDate(p[1])).join(' → ')+'</div>':'';};
+function sdFields(m,o){
+  const sts=m==='UT'?UT_STATUS:TK_STATUS,cur=o.status||(m==='UT'?'Submit':'Submitted'),sd=o.statusDates||{};
+  return '<div class="full"><b>Status dates</b> <span class="hint">The date this record reached each status. The date for the current status is required.</span></div>'+
+    sts.map(s=>'<label class="f" for="f_sd_'+s+'">'+esc(stLabel(s))+' date<input id="f_sd_'+s+'" data-sd="'+s+'" type="date" max="'+todayStr()+'" value="'+esc(sd[s]||(s===cur&&!o.statusDates?(statusDate(o,s)||todayStr()):''))+'"></label>').join('');
+}
+function askStatusDate(u,id,to){
+  const old=findItem(u,id);if(!old||old.status===to)return;
+  S.sd={u,id,to};
+  openModal('<h2>Change status to '+esc(stLabel(to))+'</h2><form id="sdform" novalidate><label class="f" for="sd_date">Date it became '+esc(stLabel(to))+'<input id="sd_date" type="date" value="'+todayStr()+'" max="'+todayStr()+'" required></label><div class="err" id="sd_err" role="alert" style="margin-top:6px"></div><div class="acts"><button type="button" class="btn ghost" data-act="sdcancel">Cancel</button><button class="btn em" type="submit">Save status</button></div></form>');
+}
+async function applyStatus(){
+  const E=S.sd;if(!E)return;const d=$('#sd_date').value,err=t=>{$('#sd_err').textContent=t;};
+  if(!d)return err('Enter the date.');if(d>todayStr())return err('The date cannot be in the future.');
+  const old=findItem(E.u,E.id);if(!old){S.sd=null;closeModal();return;}
+  const now=iso(),sd=Object.assign({},old.statusDates||{});
+  if(!sd[old.status])sd[old.status]=statusDate(old,old.status)||old.date;
+  sd[E.to]=d;
+  const upd={status:E.to,statusDates:sd,updatedAt:now,history:(old.history||[]).concat([{at:now,by:S.uid,field:'status',from:old.status,to:E.to,date:d}])};
+  const ok=await safe(async()=>{await itemsCol(E.u).doc(E.id).update(upd);localPut(E.u,Object.assign({},old,upd));});
+  S.sd=null;closeModal();if(ok)toast('Status changed to '+stLabel(E.to)+' on '+fmtDate(d));
+}
+
+/* ---------- client link ---------- */
+const findClientByName=(uid,name)=>{const k=String(name||'').trim().toLowerCase();return clientRows([uid]).find(c=>c.nameKey===k||String(c.fullName||'').toLowerCase()===k)||null;};
+const linkedSales=c=>(S.items[c.agentId]||[]).filter(x=>(x.module==='UT'||x.module==='TK')&&x.clientId===c.id);
+function clientPortfolio(c){
+  const base=Object.assign({cash:0,epf:0,prs:0,rsp:0,takaful:0},c.portfolio||{}),add={cash:0,epf:0,prs:0,rsp:0,takaful:0};
+  linkedSales(c).forEach(x=>{
+    if(x.module==='UT'&&x.status==='Disbursed'&&add[x.category]!==undefined)add[x.category]=r2(add[x.category]+r2(x.amount));
+    else if(x.module==='TK'&&x.status==='Inforced')add.takaful=r2(add.takaful+r2(x.fyac));
+  });
+  const tot={};Object.keys(base).forEach(k=>{tot[k]=r2(r2(base[k])+add[k]);});
+  return {tot,add};
+}
+function clientPicker(uid,name,cid){
+  return '<div class="f combowrap full" id="f_client_wrap"><label for="f_client">Client (optional)</label><input id="f_client" type="text" maxlength="80" autocomplete="off" autocapitalize="words" data-cpick="1" placeholder="Type a name: pick an existing client or add a new one" value="'+esc(name||'')+'"><input type="hidden" id="f_clientid" value="'+esc(cid||'')+'"><div class="combo" id="f_client_opts" role="group" aria-label="Matching clients" style="display:none"></div><span class="hint" id="f_client_hint">A new name is added to your Clients automatically. Disbursed and Inforced sales update the client profile.</span></div>';
+}
+function cpickUpdate(inp){
+  const box=$('#f_client_opts'),hid=$('#f_clientid'),hint=$('#f_client_hint');if(!box)return;
+  const uid=S.entry?S.entry.uid:S.uid,q=inp.value.trim().toLowerCase();
+  const all=clientRows([uid]).sort((a,b)=>String(a.fullName).toLowerCase()<String(b.fullName).toLowerCase()?-1:1);
+  const cur=hid.value?all.find(c=>c.id===hid.value):null;
+  if(cur&&String(cur.fullName).toLowerCase()!==q)hid.value='';
+  const m=q?all.filter(c=>(String(c.fullName)+' '+(c.phone||'')).toLowerCase().includes(q)):all;
+  box.innerHTML=m.slice(0,8).map(c=>'<button type="button" class="chip sm" data-act="cpick" data-v="'+esc(c.id)+'">'+esc(c.fullName)+(c.phone?' · '+esc(c.phone):'')+'</button>').join('');
+  box.style.display=m.length?'flex':'none';
+  const exact=all.find(c=>String(c.fullName).toLowerCase()===q);
+  hint.textContent=!q?'A new name is added to your Clients automatically. Disbursed and Inforced sales update the client profile.':exact?'Existing client. This sale will be linked to their profile.':'New client. They will be added to your Clients.';
+}
+async function resolveClient(uid,name,now){
+  name=String(name||'').trim().replace(/\s+/g,' ');if(!name)return null;
+  const hid=$('#f_clientid')&&$('#f_clientid').value;
+  let c=hid?clientRows([uid]).find(x=>x.id===hid):null;
+  if(!c)c=findClientByName(uid,name);
+  if(c)return {id:c.id,name:c.fullName,created:false};
+  const rec={id:uid22(),agentId:uid,module:'CL',date:todayStr(),submittedAt:now,createdAt:now,updatedAt:now,schemaVersion:1,fullName:name,nameKey:name.toLowerCase(),icMasked:'',email:'',phone:'',portfolio:{cash:0,epf:0,prs:0,rsp:0,takaful:0},nextEpfDate:'',nextApptDate:'',notes:'Added from a sale'};
+  await itemsCol(uid).doc(rec.id).set(rec);localPut(uid,rec);
+  return {id:rec.id,name,created:true};
+}
+function showClientSales(u,id){
+  const c=findItem(u,id);if(!c)return;
+  const list=linkedSales(c).sort((a,b)=>a.date<b.date?1:-1),pf=clientPortfolio(c);
+  const rows=list.length?'<div class="tablewrap"><table><thead><tr><th>Date</th><th>Type</th><th>Details</th><th class="r">Amount</th><th>Status and dates</th></tr></thead><tbody>'+list.map(x=>'<tr><td class="num" style="white-space:nowrap">'+fmtDate(x.date)+'</td><td>'+(x.module==='UT'?'Unit Trust':'Takaful')+'</td><td>'+(x.module==='UT'?esc((UT_CATS.find(k=>k.v===x.category)||{}).l||x.category)+(x.fund?' · '+esc(x.fund):''):esc(x.product))+'</td><td class="r num">'+(x.module==='UT'?rm(x.amount):'FYAC '+rm(x.fyac)+'<br>FYCC '+rm(x.fycc))+'</td><td>'+statusPill(x.status)+timelineHtml(x)+'</td></tr>').join('')+'</tbody></table></div>':'<div class="hint">No sales are linked to this client yet. Type their name when you add a Unit Trust sale or Takaful case.</div>';
+  const added=Object.keys(pf.add).filter(k=>pf.add[k]>0);
+  openModal('<h2>Sales · '+esc(c.fullName)+'</h2>'+(added.length?'<div class="notice" style="margin-bottom:10px">From Disbursed and Inforced sales: '+added.map(k=>(PF.find(p=>p[0]===k)||[k,k])[1]+' '+rm(pf.add[k])).join(', ')+'. These are added to the portfolio shown in the Clients list.</div>':'')+rows+'<div class="acts"><button class="btn ghost" data-act="closemodal">Close</button></div>');
+}
+
+/* ---------- challenges ---------- */
+const CH_UT=[['amount','Investment amount','RM'],['cases','Cases','#']],CH_TK=[['fyac','FYAC','RM'],['fycc','FYCC','RM'],['cases','Cases','#']];
+const chMeasures=cat=>cat==='TK'?CH_TK:CH_UT;
+const chList=()=>Object.keys(S.challenges).map(k=>S.challenges[k]).sort((a,b)=>a.from<b.from?1:-1);
+function chState(ch){const t=todayStr();return t<ch.from?'upcoming':t>ch.to?'ended':'active';}
+function chRows(ch,uids){
+  const okSt=ch.category==='UT'?'Disbursed':'Inforced',funds=(ch.funds||[]).map(f=>String(f).trim().toLowerCase()).filter(Boolean),out=[];
+  for(const u of uids)for(const x of (S.items[u]||[])){
+    if(x.module!==ch.category||x.status!==okSt)continue;
+    const d=statusDate(x,okSt);if(!d||d<ch.from||d>ch.to)continue;
+    if(funds.length&&funds.indexOf(String(ch.category==='UT'?(x.fund||''):(x.product||'')).trim().toLowerCase())<0)continue;
+    out.push(x);
+  }
+  return out;
+}
+function chTotals(ch,uids){
+  const rows=chRows(ch,uids),t={amount:0,fyac:0,fycc:0,cases:rows.length};
+  rows.forEach(x=>{if(ch.category==='UT')t.amount=r2(t.amount+r2(x.amount));else{t.fyac=r2(t.fyac+r2(x.fyac));t.fycc=r2(t.fycc+r2(x.fycc));}});
+  return t;
+}
+function chProgress(ch,tot,targets){
+  const rows=chMeasures(ch.category).filter(m=>targets&&Number(targets[m[0]])>0).map(m=>{const tg=Number(targets[m[0]]),val=tot[m[0]]||0;return {k:m[0],l:m[1],u:m[2],val,tg,p:pct(val,tg)};});
+  if(!rows.length)return {rows,overall:null,done:false};
+  const ps=rows.map(x=>Math.min(100,x.p));
+  return {rows,overall:ch.logic==='and'?Math.min.apply(null,ps):Math.max.apply(null,ps),done:ch.logic==='and'?rows.every(x=>x.p>=100):rows.some(x=>x.p>=100)};
+}
+const chFmt=(m,v)=>m.u==='RM'?rm(v):int(v);
+function chBars(pr){
+  return pr.rows.map(x=>'<div style="margin-bottom:10px"><div class="row" style="justify-content:space-between"><b>'+esc(x.l)+'</b><span class="num">'+chFmt(x,x.val)+' of '+chFmt(x,x.tg)+' · <b style="color:var(--emerald-ink)">'+x.p.toFixed(1)+'%</b></span></div><div class="prog" role="progressbar" aria-label="'+esc(x.l)+'" aria-valuenow="'+Math.min(100,Math.round(x.p))+'" aria-valuemin="0" aria-valuemax="100"><i class="'+(x.p>=100?'over':'')+'" style="width:'+Math.min(100,x.p)+'%"></i></div></div>').join('');
+}
+const chLogicText=ch=>ch.logic==='and'?'Reach every target':'Reach any one target';
+const chStatePill=ch=>{const s=chState(ch);return pill(s==='active'?'Active':s==='upcoming'?'Starts '+fmtDate(ch.from):'Ended',s==='active'?'var(--good)':s==='upcoming'?'var(--c1)':'var(--muted)');};
+const chFundText=ch=>(ch.funds&&ch.funds.length)?ch.funds.map(esc).join(', '):'All '+(ch.category==='UT'?'funds':'products');
+const chCatName=c=>c==='TK'?'Takaful':'Unit Trust';
+function chHead(ch){
+  return '<div class="row" style="justify-content:space-between;align-items:flex-start"><div><h2 style="font-size:16px">'+esc(ch.name)+'</h2><div class="sub" style="margin-bottom:4px">'+chCatName(ch.category)+' · '+fmtDate(ch.from)+' to '+fmtDate(ch.to)+'</div></div><div>'+chStatePill(ch)+'</div></div><div class="hint" style="margin-bottom:10px">Counted: '+chFundText(ch)+' · only '+(ch.category==='UT'?'Disbursed':'Inforced')+' sales, by '+(ch.category==='UT'?'Disbursed':'Inforced')+' date · '+chLogicText(ch)+'</div>';
+}
+function challengeAgentView(){
+  const p=S.profile,list=chList().filter(c=>(c.category==='UT'&&hasRHB(p))||(c.category==='TK'&&hasHLMT(p)));
+  return pageHead('Challenges','Your progress towards each challenge. '+liveTag())+
+    (list.length?list.map(ch=>{
+      const pr=chProgress(ch,chTotals(ch,[S.uid]),ch.targets||{});
+      return card('','',chHead(ch)+(pr.rows.length?chBars(pr)+(pr.done?'<div>'+pill('Target reached','var(--good)')+'</div>':''):'<div class="hint">No target is set for this challenge yet.</div>'));
+    }).join(''):card('','',empty('No challenges for you right now','When your leader creates a challenge for your business, your progress appears here.')));
+}
+function chAgentsTable(ch){
+  const ids=Object.keys(S.agents).filter(u=>ch.category==='UT'?hasRHB(S.agents[u]):hasHLMT(S.agents[u]));
+  const ms=chMeasures(ch.category).filter(m=>Number((ch.targets||{})[m[0]])>0);
+  if(!ids.length)return empty('No agents in this business yet','');
+  const rows=ids.map(u=>{const pr=chProgress(ch,chTotals(ch,[u]),ch.targets||{});return {u,pr};}).sort((a,b)=>(b.pr.overall||0)-(a.pr.overall||0));
+  return '<div class="tablewrap"><table><thead><tr><th>Agent</th>'+(ms.length?ms.map(m=>'<th class="r">'+esc(m[1])+'</th>').join(''):'<th>Target</th>')+'<th class="r">Progress</th><th>Result</th></tr></thead><tbody>'+rows.map(x=>'<tr data-open="'+esc(x.u)+'" tabindex="0"><td><b>'+esc(nameOf(x.u))+'</b></td>'+(ms.length?x.pr.rows.map(r=>'<td class="r num">'+chFmt(r,r.val)+' / '+chFmt(r,r.tg)+'</td>').join(''):'<td class="hint">Not set</td>')+'<td class="r num">'+(x.pr.overall==null?'–':x.pr.overall.toFixed(1)+'%')+'</td><td>'+(x.pr.done?pill('Target reached','var(--good)'):x.pr.overall==null?'':pill('In progress','var(--warn)'))+'</td></tr>').join('')+'</tbody></table></div>';
+}
+function challengeLeaderView(){
+  const list=chList(),ids=Object.keys(S.agents);
+  return pageHead('Challenges','Create challenges for Unit Trust or Takaful. Disbursed and Inforced sales of the counted funds feed each challenge automatically.','<button class="btn" data-act="chnew">+ Challenge</button>')+demoNote()+
+    (list.length?list.map(ch=>{
+      const q=(S.chq[ch.id]||{}).qualify||{},tot=chTotals(ch,ids),qp=chProgress(ch,tot,q);
+      const head='<div class="row" style="justify-content:flex-end;margin-bottom:6px"><button class="btn sm ghost" data-act="chedit" data-v="'+esc(ch.id)+'">Edit</button><button class="btn sm danger" data-act="chdel" data-v="'+esc(ch.id)+'">Delete</button></div>';
+      const grp='<div class="kpis" style="margin:10px 0">'+chMeasures(ch.category).map(m=>kpi(ch.category==='TK'?'tk':'ut','Group · '+m[1],chFmt(m,tot[m[0]]))).join('')+'</div>';
+      const lead=qp.rows.length?'<div class="notice" style="margin-bottom:10px"><b>Your qualification (leader only).</b> Tracked against the total group production in this challenge. '+chLogicText(ch)+'.</div>'+chBars(qp)+(qp.done?'<div>'+pill('Qualified','var(--good)')+'</div>':''):'<div class="hint">No leader qualification set. Use Edit to add one. Only you can see it.</div>';
+      return card('','',head+chHead(ch)+grp+'<div class="grid wide">'+card('Agent progress','Against each agent’s target',chAgentsTable(ch))+card('Leader qualification','Visible only to you',lead)+'</div>');
+    }).join(''):card('','',empty('No challenges yet','Press + Challenge to create the first one.','<button class="btn" data-act="chnew">+ Challenge</button>')));
+}
+function challengeStrip(uids,leader){
+  const act=chList().filter(c=>chState(c)==='active'&&(leader||(c.category==='UT'?hasRHB(S.profile):hasHLMT(S.profile))));
+  if(!act.length)return '';
+  const rows=act.map(ch=>{
+    let pr,label;
+    if(leader){const q=(S.chq[ch.id]||{}).qualify||{};pr=chProgress(ch,chTotals(ch,Object.keys(S.agents)),q);label='Group production towards your qualification';}
+    else{pr=chProgress(ch,chTotals(ch,uids),ch.targets||{});label='Your progress';}
+    const pc=pr.overall==null?0:pr.overall;
+    return '<div style="margin-bottom:12px"><div class="row" style="justify-content:space-between"><b>'+esc(ch.name)+'</b><span class="num">'+(pr.overall==null?'No target set':pc.toFixed(1)+'%')+'</span></div><div class="prog" role="progressbar" aria-label="'+esc(ch.name)+'" aria-valuenow="'+Math.round(pc)+'" aria-valuemin="0" aria-valuemax="100"><i class="'+(pc>=100?'over':'')+'" style="width:'+Math.min(100,pc)+'%"></i></div><div class="hint">'+chCatName(ch.category)+' · '+label+' · ends '+fmtDate(ch.to)+' · <a href="#" data-act="nav" data-v="'+(leader?'challenge':'ch')+'">Details</a></div></div>';
+  }).join('');
+  return card('Active challenges','',rows);
+}
+function chTargetFields(prefix,cat,vals){
+  const v=vals||{},f=(k,l,u,show)=>'<label class="f" for="'+prefix+'_'+k+'" data-chf="'+k+'" '+(show?'':'hidden')+'>'+l+' ('+u+')<input id="'+prefix+'_'+k+'" type="number" min="0" step="'+(u==='RM'?'0.01':'1')+'" inputmode="decimal" value="'+esc(v[k]!=null&&v[k]!==''?v[k]:'')+'"></label>';
+  return f('amount','Investment amount','RM',cat==='UT')+f('fyac','FYAC','RM',cat==='TK')+f('fycc','FYCC','RM',cat==='TK')+f('cases','Cases','#',true);
+}
+function chFundChips(cat){
+  const names=cat==='UT'?fundSuggestions(S.uid):productSuggestions(S.uid);
+  return names.length?'<div class="combo" data-chchips="'+cat+'" '+'>'+names.map(n=>'<button type="button" class="chip sm" data-act="chfundpick" data-v="'+esc(n)+'">'+esc(n)+'</button>').join('')+'</div>':'';
+}
+function openChallenge(id){
+  const o=id?S.challenges[id]:null,c=o||{category:'UT',funds:[],targets:{},logic:'or',name:'',from:'',to:''},q=id?((S.chq[id]||{}).qualify||{}):{};
+  S.chEdit={id:id||null};
+  openModal('<h2>'+(id?'Edit challenge':'New challenge')+'</h2><form id="challengeform" novalidate><div class="form">'+
+    '<label class="f full" for="ch_name">Challenge name<input id="ch_name" maxlength="80" value="'+esc(c.name)+'" required></label>'+
+    '<label class="f" for="ch_cat">Category<select id="ch_cat"><option value="UT"'+(c.category==='UT'?' selected':'')+'>Unit Trust</option><option value="TK"'+(c.category==='TK'?' selected':'')+'>Takaful</option></select></label>'+
+    '<label class="f" for="ch_logic">Targets rule<select id="ch_logic"><option value="or"'+(c.logic!=='and'?' selected':'')+'>OR: reaching any one target counts</option><option value="and"'+(c.logic==='and'?' selected':'')+'>AND: every target must be reached</option></select></label>'+
+    '<label class="f" for="ch_from">Start date<input id="ch_from" type="date" value="'+esc(c.from)+'" required></label>'+
+    '<label class="f" for="ch_to">End date<input id="ch_to" type="date" value="'+esc(c.to)+'" required></label>'+
+    '<label class="f full" for="ch_funds"><span id="ch_fundlbl">'+(c.category==='TK'?'Takaful products counted':'Funds counted')+'</span><textarea id="ch_funds" maxlength="1500" placeholder="One name per line. Leave empty to count all.">'+esc((c.funds||[]).join('\n'))+'</textarea><span class="hint">Only Disbursed (Unit Trust) or Inforced (Takaful) sales of these count. Leave empty for all.</span></label>'+
+    '<div class="full" id="ch_chipwrap"><div data-chips="UT"'+(c.category==='UT'?'':' hidden')+'>'+chFundChips('UT')+'</div><div data-chips="TK"'+(c.category==='TK'?'':' hidden')+'>'+chFundChips('TK')+'</div></div>'+
+    '<div class="full"><b>Agent target</b> <span class="hint">What each agent sees and works towards. Leave a box empty to skip that measure.</span></div><div class="full form" id="ch_tg" style="padding:0">'+chTargetFields('t',c.category,c.targets)+'</div>'+
+    '<div class="full"><b>Leader qualification</b> <span class="hint">Your own criteria, tracked against the total group production. Only you can see this.</span></div><div class="full form" id="ch_q" style="padding:0">'+chTargetFields('q',c.category,q)+'</div>'+
+    '</div><div class="err" id="ch_err" role="alert" style="margin-top:8px"></div><div class="acts"><button type="button" class="btn ghost" data-act="closemodal">Cancel</button><button class="btn em" type="submit">Save challenge</button></div></form>');
+}
+async function submitChallenge(){
+  const E=S.chEdit;if(!E)return;
+  const f=$('#challengeform'),v=id=>{const n=f.querySelector('#'+id);return n?n.value:'';},err=t=>{$('#ch_err').textContent=t;};
+  const name=v('ch_name').trim().replace(/\s+/g,' '),cat=v('ch_cat'),from=v('ch_from'),to=v('ch_to');
+  if(name.length<2)return err('Enter the challenge name.');
+  if(!from||!to)return err('Enter the start and end dates.');
+  if(from>to)return err('The end date must be on or after the start date.');
+  const funds=[],seen={};v('ch_funds').split(/\r?\n/).forEach(x=>{x=x.trim().replace(/\s+/g,' ').slice(0,80);if(x&&!seen[x.toLowerCase()]){seen[x.toLowerCase()]=1;funds.push(x);}});
+  const read=p=>{const o={};for(const m of chMeasures(cat)){const t=v(p+'_'+m[0]).trim();if(t==='')continue;const n=m[2]==='RM'?r2(t):Math.round(Number(t));if(!(n>=0)||n>1e10)return null;if(n>0)o[m[0]]=n;}return o;};
+  const tg=read('t'),q=read('q');
+  if(tg===null||q===null)return err('Targets must be zero or more.');
+  if(!Object.keys(tg).length)return err('Set at least one agent target so agents can see a progress bar.');
+  const now=iso(),old=E.id?S.challenges[E.id]:null,id=E.id||uid22();
+  const rec=Object.assign({},old||{createdAt:now,createdBy:S.uid,schemaVersion:1},{id,name,category:cat,from,to,funds,logic:v('ch_logic')==='and'?'and':'or',targets:tg,updatedAt:now});
+  const btn=f.querySelector('button[type=submit]');btn.disabled=true;
+  const ok=await safe(async()=>{await S.db.doc('challenges/'+id).set(rec);if(Object.keys(q).length)await S.db.doc('chq/'+id).set({id,qualify:q,updatedAt:now});else if(S.chq[id])await S.db.doc('chq/'+id).delete();});
+  btn.disabled=false;if(!ok)return;
+  S.challenges[id]=rec;if(Object.keys(q).length)S.chq[id]={id,qualify:q};else delete S.chq[id];
+  toast(E.id?'Challenge updated':'Challenge created');closeModal();schedule();
+}
+
 /* ---------- leader views ---------- */
 function teamUids(){return Object.keys(S.agents).filter(u=>S.aff==='all'||S.agents[u].affiliation===S.aff);}
 const hasDemo=()=>Object.keys(S.agents).some(u=>S.agents[u].demo);
@@ -1220,7 +1423,8 @@ function demoNote(){return hasDemo()?'<div class="notice warn"><b>Sample data is
 function leaderView(){
   if(S.drill)return drillView(S.drill);
   const v=S.view;
-  if(!Object.keys(S.agents).length&&v!=='targets'&&v!=='settings')return noAgents();
+  if(!Object.keys(S.agents).length&&v!=='targets'&&v!=='settings'&&v!=='challenge')return noAgents();
+  if(v==='challenge')return challengeLeaderView();
   if(v==='agents')return directoryView();
   if(v==='boards')return boardsView();
   if(v==='feed')return feedView();
@@ -1250,7 +1454,7 @@ function overviewView(){
     dailyCard()+
     card('Latest submissions','Newest first. <a href="#" data-act="nav" data-v="feed">Open the live feed</a>',recent.length?'<div class="feed">'+recent.map(x=>feedRow(x,true)).join('')+'</div>':empty('No submissions yet','Agents’ new records appear here instantly.'))+
     periodBar(sel)+kpiStrip(uids,r,null,{total:all.length})+
-    '<div class="grid wide">'+targetCard('team',all,r,true)+statusCard(uids,r)+'</div>'+
+    challengeStrip(all,true)+'<div class="grid wide">'+targetCard('team',all,r,true)+statusCard(uids,r)+'</div>'+
     utPanel(uids,r,true)+tkPanel(uids,r,true)+rcPanel(uids,r,true);
 }
 function dirRows(){
@@ -1357,12 +1561,12 @@ function entryFields(m,it,uid){
     combo('f_fund','Fund name (optional)',o.fund||'',fundSuggestions(uid),{ph:'Type any fund name, or tap a saved one',hint:'Leave blank if unknown. Reports will use the sales category. You can edit it later.'})+
     '<label class="f" for="f_amt">Investment amount (RM)<input id="f_amt" type="number" min="0" step="0.01" inputmode="decimal" value="'+esc(o.amount!=null?o.amount:'')+'" required></label>'+
     '<label class="f" for="f_mon" id="f_monwrap" '+((o.category||'cash')==='rsp'?'':'hidden')+'>RSP monthly contribution (RM)<input id="f_mon" type="number" min="0" step="0.01" inputmode="decimal" value="'+esc(o.monthlyContribution||'')+'"></label>'+
-    sel('f_status','Status',UT_STATUS,o.status||'Submit')+notes+'</div>';
+    clientPicker(uid,o.clientName,o.clientId)+sel('f_status','Status',UT_STATUS.map(s=>[s,stLabel(s)]),o.status||'Submit')+sdFields('UT',o)+notes+'</div>';
   if(m==='TK')return '<div class="form">'+date('Case submission date')+
     combo('f_prod','Takaful product',o.product||'',productSuggestions(uid),{ph:'Type the product name, or tap a saved one',required:true})+
     '<label class="f" for="f_fyac">FYAC (RM)<input id="f_fyac" type="number" min="0" step="0.01" inputmode="decimal" value="'+esc(o.fyac!=null?o.fyac:'')+'" required></label>'+
     '<label class="f" for="f_fycc">FYCC (RM)<input id="f_fycc" type="number" min="0" step="0.01" inputmode="decimal" value="'+esc(o.fycc!=null?o.fycc:'')+'" required></label>'+
-    sel('f_status','Status',TK_STATUS,o.status||'Submitted')+notes+'</div>';
+    clientPicker(uid,o.clientName,o.clientId)+sel('f_status','Status',TK_STATUS,o.status||'Submitted')+sdFields('TK',o)+notes+'</div>';
   const cats=[];if(hasRHB(prof)||o.category==='RHB')cats.push('RHB');if(hasHLMT(prof)||o.category==='HLMT')cats.push('HLMT');if(!cats.length)cats.push('RHB','HLMT');
   return '<div class="form"><label class="f full" for="f_name">Candidate or recruit name<input id="f_name" maxlength="80" value="'+esc(o.name||'')+'" required></label>'+sel('f_cat','Recruitment category',cats,o.category||cats[0])+date('Recruitment date')+sel('f_status','Status',RC_STATUS,o.status||'Prospect')+notes+'</div>';
 }
@@ -1399,12 +1603,21 @@ async function submitEntry(again){
     data={name,nameKey:key,category,status:v('f_status')};
   }
   const now=iso();let rec;
+  if(E.module==='UT'||E.module==='TK'){
+    const sd={};let bad='';f.querySelectorAll('[data-sd]').forEach(n=>{if(n.value){if(n.value>todayStr())bad='A status date cannot be in the future.';sd[n.dataset.sd]=n.value;}});
+    if(bad)return err(bad);
+    if(!sd[data.status])return err('Enter the date for the '+stLabel(data.status)+' status.');
+    data.statusDates=sd;
+    const cn=v('f_client').trim();
+    if(cn){const btn0=f.querySelectorAll('button');btn0.forEach(b=>{b.disabled=true;});let c=null;try{c=await resolveClient(E.uid,cn,now);}catch(e){console.error(e);}btn0.forEach(b=>{b.disabled=false;});if(!c)return err('Could not save the client. Try again.');data.clientId=c.id;data.clientName=c.name;if(c.created)toast('New client added: '+c.name);}
+    else{data.clientId='';data.clientName='';}
+  }
   if(E.id){
     const old=findItem(E.uid,E.id);if(!old)return err('This record no longer exists.');
     rec=Object.assign({},old,data,{date,notes,updatedAt:now});
-    if(old.status!==data.status)rec.history=(old.history||[]).concat([{at:now,by:S.uid,field:'status',from:old.status,to:data.status}]);
+    if(old.status!==data.status)rec.history=(old.history||[]).concat([{at:now,by:S.uid,field:'status',from:old.status,to:data.status,date:data.statusDates?data.statusDates[data.status]:undefined}]);
   }else{
-    rec=Object.assign({id:uid22(),agentId:E.uid,module:E.module,date,notes,submittedAt:now,createdAt:now,updatedAt:now,historical:date<todayStr(),schemaVersion:1,history:[{at:now,by:S.uid,field:'status',from:null,to:data.status}]},data);
+    rec=Object.assign({id:uid22(),agentId:E.uid,module:E.module,date,notes,submittedAt:now,createdAt:now,updatedAt:now,historical:date<todayStr(),schemaVersion:1,history:[{at:now,by:S.uid,field:'status',from:null,to:data.status,date:data.statusDates?data.statusDates[data.status]:undefined}]},data);
   }
   const btns=f.querySelectorAll('button');btns.forEach(b=>{b.disabled=true;});
   const ok=await safe(async()=>{await itemsCol(E.uid).doc(rec.id).set(rec);localPut(E.uid,rec);});
@@ -1412,7 +1625,7 @@ async function submitEntry(again){
   if(!ok)return;
   if(!E.id&&E.uid===S.uid&&S.profile){const k=E.module.toLowerCase(),cur=(S.profile.setup||{})[E.module==='UT'?'ut':E.module==='TK'?'tk':'rc'];const sk=E.module==='UT'?'ut':E.module==='TK'?'tk':'rc';if(!cur||cur==='not_started'){safe(()=>S.db.doc('agents/'+S.uid).update({setup:{[sk]:'in_progress'}}));}}
   toast(E.id?'Record updated':'Saved: '+modTitle(E.module)+' record');
-  if(again&&!E.id){['f_amt','f_mon','f_notes','f_name','f_fyac','f_fycc'].forEach(id=>{const n=f.querySelector('#'+id);if(n)n.value='';});$('#f_err').textContent='';const first=f.querySelector('#f_fund,#f_prod,#f_name');if(first)first.focus();}
+  if(again&&!E.id){['f_amt','f_mon','f_notes','f_name','f_fyac','f_fycc','f_client','f_clientid'].forEach(id=>{const n=f.querySelector('#'+id);if(n)n.value='';});$('#f_err').textContent='';const first=f.querySelector('#f_fund,#f_prod,#f_name');if(first)first.focus();}
   else closeModal();
 }
 async function changeStatus(u,id,to){
@@ -1514,7 +1727,7 @@ function doExport(kind,m){
       dirRows().map(x=>{const p=x.p,s=agentSummary(x.u,yr);return [p.fullName,p.email,p.phone||'',p.uplineName||'',p.icMasked,affLabel(p.affiliation),p.rhb?(p.rhb.code||'Pending'):'',p.rhb?rankLabel('RHB',p.rhb.ranking):'',p.hlmt?(p.hlmt.code||'Pending'):'',p.hlmt?rankLabel('HLMT',p.hlmt.ranking):'',p.registeredAt,x.st,s.ut.total,s.tk.fyac,s.tk.fycc,s.rc.cat.RHB,s.rc.cat.HLMT];}));}
   if(kind==='clients'){const uids=mode()==='agent'?[S.uid]:Object.keys(S.agents);
     return exportCsv('clients',['Agent','Client name','IC (masked)','Email','Phone','Cash (RM)','EPF/KWSP (RM)','PRS (RM)','RSP (RM)','Takaful (RM)','Next EPF investment date','Next proposed appointment','Notes'],
-      clientRows(uids).sort((a,b)=>a.fullName.toLowerCase()<b.fullName.toLowerCase()?-1:1).map(x=>{const pf=x.portfolio||{};return [nameOf(x.agentId),x.fullName,x.icMasked,x.email,x.phone,pf.cash||0,pf.epf||0,pf.prs||0,pf.rsp||0,pf.takaful||0,x.nextEpfDate,x.nextApptDate,x.notes];}));}
+      clientRows(uids).sort((a,b)=>a.fullName.toLowerCase()<b.fullName.toLowerCase()?-1:1).map(x=>{const pf=clientPortfolio(x).tot;return [nameOf(x.agentId),x.fullName,x.icMasked,x.email,x.phone,pf.cash||0,pf.epf||0,pf.prs||0,pf.rsp||0,pf.takaful||0,x.nextEpfDate,x.nextApptDate,x.notes];}));}
   if(kind==='prospects'){const uids=mode()==='agent'?[S.uid]:Object.keys(S.agents),o=[];uids.forEach(u=>(S.items[u]||[]).forEach(x=>{if(x.module==='PR')o.push(x);}));
     return exportCsv('prospects',['Agent','Source','Prospect name','Phone','Referrer','Event','Date','Notes'],o.sort((a,b)=>a.date<b.date?1:-1).map(x=>[nameOf(x.agentId),SRC_L[x.source]||x.source,x.name,x.phone,x.referrer,x.eventName,x.date,x.notes]));}
   if(kind==='team')return exportCsv('team-performance',PERF_H,Object.keys(S.agents).map(perfRow));
@@ -1532,10 +1745,10 @@ async function loadDemo(){
   for(const [slug,nm,aff,rh,hl] of defs){
     const uid='demo_'+slug,regAt=iso();
     writes.push(()=>S.db.doc('agents/'+uid).set({uid,fullName:'Demo · '+nm,email:slug+'@example.invalid',icMasked:'******-**-0000',affiliation:aff,rhb:rh?{code:'DEMO-R-'+slug.toUpperCase(),codeStatus:'provided',ranking:rh.ranking}:null,hlmt:hl?{code:'DEMO-H-'+slug.toUpperCase(),codeStatus:'provided',ranking:hl.ranking}:null,rankingHistory:[],setup:{ut:'completed',tk:'completed',rc:'completed'},registeredAt:regAt,updatedAt:regAt,demo:true,schemaVersion:1}));
-    const mk=(module,date,data)=>{const id='d'+Math.random().toString(36).slice(2,10);const rec=Object.assign({id,agentId:uid,module,date,notes:'Demo record',submittedAt:iso(),createdAt:iso(),updatedAt:iso(),historical:date<todayStr(),demo:true,schemaVersion:1,history:[]},data);writes.push(()=>itemsCol(uid).doc(id).set(rec));};
+    const mk=(module,date,data)=>{const id='d'+Math.random().toString(36).slice(2,10);const rec=Object.assign({id,agentId:uid,module,date,notes:'Demo record',submittedAt:iso(),createdAt:iso(),updatedAt:iso(),historical:date<todayStr(),demo:true,schemaVersion:1,history:[]},data);if(module==='UT'||module==='TK')rec.statusDates={[rec.status]:date};writes.push(()=>itemsCol(uid).doc(id).set(rec));};
     for(let m=0;m<=cm;m++){
       const maxD=m===cm?Math.max(1,now.getDate()):28,day=()=>pad(1+Math.floor(rnd()*maxD)),dt=()=>now.getFullYear()+'-'+pad(m+1)+'-'+day();
-      if(rh)for(let i=0;i<2+Math.floor(rnd()*2);i++){const cat=pick(['cash','epf','prs','rsp','cash']);mk('UT',dt(),{category:cat,fund:rnd()>.25?pick(funds):'',amount:r2(5000+rnd()*70000),monthlyContribution:cat==='rsp'?r2(200+rnd()*1200):0,status:pick(['Disbursed','Disbursed','Submit','Rejected'])});}
+      if(rh)for(let i=0;i<2+Math.floor(rnd()*2);i++){const cat=pick(['cash','epf','prs','rsp','cash']);mk('UT',dt(),{category:cat,fund:rnd()>.25?pick(funds):'',amount:r2(5000+rnd()*70000),monthlyContribution:cat==='rsp'?r2(200+rnd()*1200):0,status:pick(['Disbursed','Disbursed','Submit','Close','Rejected'])});}
       if(hl)for(let i=0;i<2;i++){const ac=r2(1200+rnd()*8000);mk('TK',dt(),{product:pick(prods),fyac:ac,fycc:r2(ac*(.4+rnd()*.3)),status:pick(['Inforced','Inforced','Submitted','Pending'])});}
     }
     const cats=aff==='BOTH'?['RHB','HLMT']:[aff];
@@ -1577,6 +1790,14 @@ function act(a,el){
     case 'del':{const [u,id]=v.split('|'),it=findItem(u,id);if(!it)break;S.del=v;openModal('<h2>Delete this record?</h2><p>'+esc(modTitle(it.module))+' record dated '+fmtDate(it.date)+' will be removed from all totals. This cannot be undone.</p><div class="acts"><button class="btn ghost" data-act="closemodal">Keep it</button><button class="btn danger" data-act="dodel">Delete record</button></div>');break;}
     case 'dodel':{const [u,id]=(S.del||'|').split('|'),it0=u&&id?findItem(u,id):null;closeModal();if(u&&id)safe(async()=>{await itemsCol(u).doc(id).delete();localDel(u,id);if(it0&&it0.module==='CL'&&u===S.uid)await S.db.doc('data/users/'+u+'/secure/clients/'+id).delete();}).then(ok=>{if(ok)toast('Record deleted');});break;}
     case 'closemodal':closeModal();break;
+    case 'sdcancel':S.sd=null;closeModal();break;
+    case 'cpick':{const c=clientRows([S.entry?S.entry.uid:S.uid]).find(x=>x.id===v);if(c){$('#f_client').value=c.fullName;$('#f_clientid').value=c.id;cpickUpdate($('#f_client'));$('#f_client_opts').style.display='none';}break;}
+    case 'clsales':{const [u,id]=v.split('|');showClientSales(u,id);break;}
+    case 'chnew':openChallenge(null);break;
+    case 'chedit':openChallenge(v);break;
+    case 'chdel':{const ch=S.challenges[v];if(!ch)break;S.chDel=v;openModal('<h2>Delete this challenge?</h2><p>'+esc(ch.name)+' and its leader qualification will be removed. Sales records are not affected.</p><div class="acts"><button class="btn ghost" data-act="closemodal">Keep it</button><button class="btn danger" data-act="chdodel">Delete challenge</button></div>');break;}
+    case 'chdodel':{const id=S.chDel;S.chDel=null;closeModal();if(id)safe(async()=>{await S.db.doc('challenges/'+id).delete();if(S.chq[id])await S.db.doc('chq/'+id).delete();}).then(ok=>{if(ok){delete S.challenges[id];delete S.chq[id];toast('Challenge deleted');schedule();}});break;}
+    case 'chfundpick':{const t=$('#ch_funds');if(t){const cur=t.value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);if(cur.map(x=>x.toLowerCase()).indexOf(v.toLowerCase())<0){cur.push(v);t.value=cur.join('\n');}}break;}
     case 'demoLoad':loadDemo();break;
     case 'demoRemove':removeDemo();break;
     case 'editprofile':openProfileEdit(v);break;
@@ -1604,13 +1825,17 @@ document.addEventListener('input',e=>{
   const el=e.target;
   if(el.dataset&&el.dataset.set&&isText(el)){setPath(el.dataset.set,el.value);render();}
   if(el.dataset&&el.dataset.combo)filterCombo(el);
+  if(el.dataset&&el.dataset.cpick)cpickUpdate(el);
   if(el.dataset&&el.dataset.tg){S.tgdraft=S.tgdraft||{};S.tgdraft[el.dataset.tg]=el.value;}
 });
+document.addEventListener('focusin',e=>{const el=e.target;if(el.dataset&&el.dataset.cpick)cpickUpdate(el);});
 document.addEventListener('change',e=>{
   const el=e.target;
   if(el.dataset&&el.dataset.set&&!isText(el)){if(el.dataset.set==='tmonth')S.tgdraft=null;setPath(el.dataset.set,el.value);render();return;}
-  if(el.dataset&&el.dataset.status){const [u,id]=el.dataset.status.split('|');changeStatus(u,id,el.value);return;}
+  if(el.dataset&&el.dataset.status){const [u,id]=el.dataset.status.split('|');askStatusDate(u,id,el.value);render();return;}
   if(el.dataset&&el.dataset.setup){safe(()=>S.db.doc('agents/'+S.uid).update({setup:{[el.dataset.setup]:el.value}}));return;}
+  if(el.id==='f_status'&&$('#entryform')){const n=$('#f_sd_'+el.value);if(n&&!n.value){const d=$('#f_date');n.value=d&&d.value||todayStr();}}
+  if(el.id==='ch_cat'){const c=el.value;document.querySelectorAll('#challengeform [data-chf]').forEach(n=>{const k=n.dataset.chf;n.hidden=k==='cases'?false:k==='amount'?c!=='UT':c!=='TK';});document.querySelectorAll('#challengeform [data-chips]').forEach(n=>{n.hidden=n.dataset.chips!==c;});$('#ch_fundlbl').textContent=c==='TK'?'Takaful products counted':'Funds counted';}
   if(el.id==='f_cat'&&$('#f_monwrap'))$('#f_monwrap').hidden=el.value!=='rsp';
   if(el.id==='q_src'){const ev=el.value==='event';$('#q_refwrap').hidden=ev;$('#q_evwrap').hidden=!ev;$('#q_datelbl').firstChild.nodeValue=ev?'Event date':'Date received';}
   if(el.name==='aff'){const x=el.value;$('#blk_rhb').hidden=x==='HLMT';$('#blk_hlmt').hidden=x==='RHB';}
@@ -1619,7 +1844,7 @@ document.addEventListener('change',e=>{
 });
 document.addEventListener('submit',e=>{
   e.preventDefault();const id=e.target.id;
-  if(id==='regform')submitReg();else if(id==='entryform')submitEntry(e.submitter&&e.submitter.value==='again');else if(id==='profform')submitProf();else if(id==='clientform')submitClient();else if(id==='prospform')submitProspect(e.submitter&&e.submitter.value==='again');
+  if(id==='regform')submitReg();else if(id==='entryform')submitEntry(e.submitter&&e.submitter.value==='again');else if(id==='profform')submitProf();else if(id==='clientform')submitClient();else if(id==='sdform')applyStatus();else if(id==='challengeform')submitChallenge();else if(id==='prospform')submitProspect(e.submitter&&e.submitter.value==='again');
 });
 let rt=0;
 window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>{const c=$('#main .chart[data-cid]');if(c&&Math.abs((c.getBoundingClientRect().width|0)-(+c.dataset.w||0))>8)mountCharts($('#main'));},160);});
